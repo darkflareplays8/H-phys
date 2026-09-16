@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>H-phys</title>
+<style>
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: #000;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 60px 20px;
+  }
+  h1 {
+    font-size: clamp(24px, 6vw, 40px);
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+  }
+  p.sub {
+    opacity: 0.6;
+    margin-top: 0;
+    margin-bottom: 40px;
+    font-size: 14px;
+  }
+  #list {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  a.entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #141414;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 16px 18px;
+    color: #fff;
+    text-decoration: none;
+    font-size: 17px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  a.entry:hover {
+    background: #1e1e1e;
+    border-color: #666;
+  }
+  a.entry .arrow {
+    opacity: 0.5;
+  }
+  #msg {
+    opacity: 0.5;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<h1>H-phys</h1>
+<p class="sub">Circle battle simulation — versions</p>
+<div id="list"><span id="msg">Loading versions…</span></div>
+
+<script>
+const OWNER = 'darkflareplays8';
+const REPO = 'H-phys';
+
+async function loadVersions() {
+  const listEl = document.getElementById('list');
+  try {
+    const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/`);
+    if (!res.ok) throw new Error('GitHub API error ' + res.status);
+    const files = await res.json();
+
+    const versionFiles = files
+      .filter(f => f.type === 'file' && /^v(\d+)\.html$/i.test(f.name))
+      .map(f => ({
+        name: f.name,
+        num: parseInt(f.name.match(/^v(\d+)\.html$/i)[1], 10)
+      }))
+      .sort((a, b) => a.num - b.num);
+
+    if (versionFiles.length === 0) {
+      listEl.innerHTML = '<span id="msg">No versions found yet.</span>';
+      return;
+    }
+
+    listEl.innerHTML = '';
+    for (const v of versionFiles) {
+      const a = document.createElement('a');
+      a.className = 'entry';
+      a.href = './' + v.name;
+      a.innerHTML = `<span>Part ${v.num}</span><span class="arrow">&rarr;</span>`;
+      listEl.appendChild(a);
+    }
+  } catch (err) {
+    listEl.innerHTML = '<span id="msg">Could not load version list.</span>';
+    console.error(err);
+  }
+}
+
+loadVersions();
+</script>
+</body>
+</html>
