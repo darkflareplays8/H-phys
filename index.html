@@ -67,35 +67,24 @@
 <div id="list"><span id="msg">Loading versions…</span></div>
 
 <script>
-const OWNER = 'darkflareplays8';
-const REPO = 'H-phys';
-
 async function loadVersions() {
   const listEl = document.getElementById('list');
   try {
-    const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/`);
-    if (!res.ok) throw new Error('GitHub API error ' + res.status);
-    const files = await res.json();
+    const res = await fetch('./versions.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error('versions.json missing (' + res.status + ')');
+    const nums = await res.json();
 
-    const versionFiles = files
-      .filter(f => f.type === 'file' && /^v(\d+)\.html$/i.test(f.name))
-      .map(f => ({
-        name: f.name,
-        num: parseInt(f.name.match(/^v(\d+)\.html$/i)[1], 10)
-      }))
-      .sort((a, b) => a.num - b.num);
-
-    if (versionFiles.length === 0) {
+    if (!nums || nums.length === 0) {
       listEl.innerHTML = '<span id="msg">No versions found yet.</span>';
       return;
     }
 
     listEl.innerHTML = '';
-    for (const v of versionFiles) {
+    for (const num of nums) {
       const a = document.createElement('a');
       a.className = 'entry';
-      a.href = './' + v.name;
-      a.innerHTML = `<span>Part ${v.num}</span><span class="arrow">&rarr;</span>`;
+      a.href = `./v${num}.html`;
+      a.innerHTML = `<span>Part ${num}</span><span class="arrow">&rarr;</span>`;
       listEl.appendChild(a);
     }
   } catch (err) {
