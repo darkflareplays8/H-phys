@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Circle Battle Sim - p5</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<style>
+  html, body {
+    margin: 0;
+    background: #000;
+    overflow: hidden;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  #ui {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    color: #fff;
+    font-size: 14px;
+    z-index: 10;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  button {
+    background: #222;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover { background: #333; }
+  #status {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    color: #fff;
+    font-size: 13px;
+    text-align: right;
+    z-index: 10;
+  }
+  #title {
+    position: fixed;
+    top: 8%;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #fff;
+    font-size: 22px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    z-index: 9;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="ui">
+  <button onclick="resetSim()">Restart</button>
+  <button onclick="toggleSpeed()">Speed: <span id="speedLabel">1x</span></button>
+</div>
+<div id="status"></div>
+<div id="title">PART 2</div>
+
+<script>
+let center, radius;
+
+const PALETTE = ['#ff5fc4', '#ffb347', '#e0c341', '#ffe45f', '#4d63ff', '#e8d54a'];
+const SHAPES = ['circle', 'triangle', 'square', 'diamond', 'star', 'plus'];
+
+let speedMult = 1;
+function toggleSpeed() {
+  speedMult = speedMult === 1 ? 2 : speedMult === 2 ? 0.5 : 1;
+  document.getElementById('speedLabel').textContent = speedMult + 'x';
+}
+
+const INITIAL_RAYS = 12;
+const RAYS_PER_BOUNCE = 1;
+const LOCAL_ARC_SPREAD = Math.PI * 0.62;
+const BALL_R = 16;
+const WALL_SPEEDUP = 1.05;
+const BASE_SPEED = 2.88;
+
+function pointOnCircle(angle) {
+  return { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius };
+}
+
+class Head {
+  constructor(id, angle) {
+    this.id = id;
+    this.color = PALETTE[id % PALETTE.length];
+    this.shape = SHAPES[id % SHAPES.length];
+    this.pos = {
+      x: center.x + Math.cos(angle) * (radius - BALL_R),
+      y: center.y + Math.sin(angle) * (radius - BALL_R)
+    };
+    const inward = angle + Math.PI;
+    const jitter = (Math.random() - 0.5) * 0.5;
+    this.vel = {
+      x: Math.cos(inward + jitter) * BASE_SPEED,
+      y: Math.sin(inward + jitter) * BASE_SPEED
+    };
+    this.rays = [];
+    this.spawnRayBatch(angle, INITIAL_RAYS);
+    this.alive = true;
+  }
+
+  spawnRayBatch(wallAngle, count) {
+    for (let i = 0; i < count; i++) {
+      const a = wallAngle + (Math.random() - 0.5) * LOCAL_ARC_SPREAD;
+      this.rays.push({ endpoint: pointOnCircle(a), alive: true });
+    }
+  }
+
+  aliveRayCount() {
+    return this.rays.filter(r => r.alive).length;
+  }
+
+  rayEndpoints() {
+    return this.rays.filter(r => r.alive).map(r => ({ start: this.pos, end: r.endpoint, ref: r }));
+  }
+
+  draw() {
+    if (!this.alive) return;
+    for (const seg of this.rayEndpoints()) {
+      push();
+      stroke(this.color);
+      strokeWeight(1.2);
+      let c = color(this.color);
+      c.setAlpha(165);
+      stroke(c);
+      line(seg.start.x, seg.start.y, seg.end.x, seg.end.y);
+      pop();
+    }
+    drawShape(this.pos.x, this.pos.y, BALL_R, this.shape, this.color);
+  }
+}
+
+function drawShape(x, y, s, shape, col) {
+  push();
+  translate(x, y);
+
+  noStroke();
+  fill(col);
+  circle(0, 0, s * 2);
+  stroke('#000');
+  strokeWeight(1.5);
+  noFill();
+  circle(0, 0, s * 2);
+
+  const inner = s * 0.55;
+  noStroke();
+  fill('#000');
+
+  beginShape();
+  if (shape === 'circle') {
+    endShape();
+    circle(0, 0, inner * 2);
+  } else if (shape === 'square') {
+    vertex(-inner, -inner);
+    vertex(inner, -inner);
+    vertex(inner, inner);
+    vertex(-inner, inner);
+    endShape(CLOSE);
+  } else if (shape === 'triangle') {
+    vertex(0, -inner);
+    vertex(inner, inner);
+    vertex(-inner, inner);
+    endShape(CLOSE);
+  } else if (shape === 'diamond') {
+    vertex(0, -inner);
+    vertex(inner, 0);
+    vertex(0, inner);
+    vertex(-inner, 0);
+    endShape(CLOSE);
+  } else if (shape === 'star') {
+    const spikes = 5, outerR = inner, innerR = inner * 0.45;
+    let rot = -Math.PI / 2;
+    const step = Math.PI / spikes;
+    vertex(0, -outerR);
+    for (let i = 0; i < spikes; i++) {
+      vertex(Math.cos(rot) * outerR, Math.sin(rot) * outerR);
+      rot += step;
+      vertex(Math.cos(rot) * innerR, Math.sin(rot) * innerR);
+      rot += step;
+    }
+    endShape(CLOSE);
+  } else if (shape === 'plus') {
+    const t = inner * 0.4;
+    vertex(-t, -inner); vertex(t, -inner); vertex(t, -t);
+    vertex(inner, -t); vertex(inner, t); vertex(t, t);
+    vertex(t, inner); vertex(-t, inner); vertex(-t, t);
+    vertex(-inner, t); vertex(-inner, -t); vertex(-t, -t);
+    endShape(CLOSE);
+  }
+
+  pop();
+}
+
+function pointSegDist(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  let t = lenSq > 1e-9 ? ((px - ax) * dx + (py - ay) * dy) / lenSq : 0;
+  t = Math.max(0, Math.min(1, t));
+  const cx = ax + t * dx, cy = ay + t * dy;
+  return { dist: Math.hypot(px - cx, py - cy), x: cx, y: cy };
+}
+
+let heads = [];
+let particles = [];
+let headIdCounter = 0;
+
+function resetSim() {
+  heads = [];
+  particles = [];
+  headIdCounter = 0;
+  const n = 6;
+  for (let i = 0; i < n; i++) {
+    heads.push(new Head(headIdCounter++, (Math.PI * 2 / n) * i - Math.PI / 2));
+  }
+}
+
+function spawnBurst(pt, col) {
+  for (let i = 0; i < 6; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const spd = Math.random() * 1.5 + 0.3;
+    particles.push({
+      x: pt.x, y: pt.y,
+      vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
+      life: 60 + Math.random() * 40,
+      maxLife: 100,
+      color: col,
+      r: Math.random() * 3 + 1.5
+    });
+  }
+}
+
+function updatePhysics() {
+  for (const h of heads) {
+    if (!h.alive) continue;
+    h.pos.x += h.vel.x * speedMult;
+    h.pos.y += h.vel.y * speedMult;
+
+    const dx = h.pos.x - center.x, dy = h.pos.y - center.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist + BALL_R > radius) {
+      const nx = dx / dist, ny = dy / dist;
+      const dot = h.vel.x * nx + h.vel.y * ny;
+      h.vel.x -= 2 * dot * nx;
+      h.vel.y -= 2 * dot * ny;
+      h.vel.x *= WALL_SPEEDUP;
+      h.vel.y *= WALL_SPEEDUP;
+      const overlap = (dist + BALL_R) - radius;
+      h.pos.x -= nx * overlap;
+      h.pos.y -= ny * overlap;
+      const touchAngle = Math.atan2(ny, nx);
+      h.spawnRayBatch(touchAngle, RAYS_PER_BOUNCE);
+    }
+  }
+
+  for (let i = 0; i < heads.length; i++) {
+    for (let j = i + 1; j < heads.length; j++) {
+      const a = heads[i], b = heads[j];
+      if (!a.alive || !b.alive) continue;
+      const dx = b.pos.x - a.pos.x, dy = b.pos.y - a.pos.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < BALL_R * 2 && dist > 0.001) {
+        const nx = dx / dist, ny = dy / dist;
+        const overlap = BALL_R * 2 - dist;
+        a.pos.x -= nx * overlap / 2;
+        a.pos.y -= ny * overlap / 2;
+        b.pos.x += nx * overlap / 2;
+        b.pos.y += ny * overlap / 2;
+
+        const avn = a.vel.x * nx + a.vel.y * ny;
+        const bvn = b.vel.x * nx + b.vel.y * ny;
+        a.vel.x += (bvn - avn) * nx;
+        a.vel.y += (bvn - avn) * ny;
+        b.vel.x += (avn - bvn) * nx;
+        b.vel.y += (avn - bvn) * ny;
+
+        a.vel.x *= WALL_SPEEDUP;
+        a.vel.y *= WALL_SPEEDUP;
+        b.vel.x *= WALL_SPEEDUP;
+        b.vel.y *= WALL_SPEEDUP;
+      }
+    }
+  }
+}
+
+function checkRayCollisions() {
+  for (const h of heads) {
+    if (!h.alive) continue;
+    for (const other of heads) {
+      if (other === h || !other.alive) continue;
+      for (const seg of h.rayEndpoints()) {
+        if (!seg.ref.alive) continue;
+        const hit = pointSegDist(other.pos.x, other.pos.y, seg.start.x, seg.start.y, seg.end.x, seg.end.y);
+        if (hit.dist < BALL_R) {
+          seg.ref.alive = false;
+          spawnBurst({ x: hit.x, y: hit.y }, h.color);
+        }
+      }
+    }
+  }
+}
+
+function checkDeaths() {
+  for (const h of heads) {
+    if (h.alive && h.aliveRayCount() === 0) {
+      h.alive = false;
+      spawnBurst(h.pos, h.color);
+    }
+  }
+}
+
+function updateParticles() {
+  for (const p of particles) {
+    p.x += p.vx * speedMult;
+    p.y += p.vy * speedMult;
+    p.vx *= 0.98;
+    p.vy *= 0.98;
+    p.life -= speedMult;
+  }
+  particles = particles.filter(p => p.life > 0);
+}
+
+function drawParticles() {
+  noStroke();
+  for (const p of particles) {
+    let c = color(p.color);
+    c.setAlpha(Math.max(0, p.life / p.maxLife) * 204);
+    fill(c);
+    circle(p.x, p.y, p.r * 2);
+  }
+}
+
+function drawArena() {
+  noFill();
+  stroke(255, 255, 255, 153);
+  strokeWeight(6);
+  circle(center.x, center.y, radius * 2);
+}
+
+function updateStatus() {
+  const aliveHeads = heads.filter(h => h.alive);
+  const statusEl = document.getElementById('status');
+  if (aliveHeads.length === 1) {
+    statusEl.innerHTML = `<b style="color:${aliveHeads[0].color}">Winner!</b>`;
+    return;
+  }
+  if (aliveHeads.length === 0) {
+    statusEl.innerHTML = `Draw`;
+    return;
+  }
+  let text = aliveHeads.length + ' alive<br>';
+  for (const h of aliveHeads) {
+    text += `<span style="color:${h.color}">●</span> ${h.aliveRayCount()}&nbsp;&nbsp;`;
+  }
+  statusEl.innerHTML = text;
+}
+
+function computeArena() {
+  center = { x: width / 2, y: height / 2 };
+  radius = Math.min(width, height) * 0.44;
+}
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  computeArena();
+  resetSim();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  computeArena();
+}
+
+function draw() {
+  noStroke();
+  fill(0, 0, 0, 71);
+  rect(0, 0, width, height);
+
+  drawArena();
+  updatePhysics();
+  checkRayCollisions();
+  checkDeaths();
+  updateParticles();
+  drawParticles();
+
+  for (const h of heads) h.draw();
+
+  updateStatus();
+}
+</script>
+</body>
+</html>
