@@ -65,6 +65,30 @@ button:hover {
   z-index: 9;
   pointer-events: none;
 }
+
+#renderUi {
+  position: fixed;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 10;
+}
+
+#renderBtn.recording {
+  background: #6b1b1b;
+  border-color: #b33;
+}
+
+#renderStatus {
+  color: #fff;
+  font-size: clamp(12px, 3vw, 14px);
+  opacity: 0.85;
+  min-height: 1.2em;
+}
 </style>
 </head>
 
@@ -76,6 +100,11 @@ button:hover {
 
 <div id="status"></div>
 <div id="title">PART 2</div>
+
+<div id="renderUi">
+  <button id="renderBtn" onclick="toggleRender()">Render Video</button>
+  <div id="renderStatus"></div>
+</div>
 
 <script>
 let center;
@@ -536,11 +565,13 @@ function updateStatus() {
   if (aliveHeads.length === 1) {
     statusElement.innerHTML =
       `<b style="color:${aliveHeads[0].color}">Winner!</b>`;
+    onMatchEnd();
     return;
   }
 
   if (aliveHeads.length === 0) {
     statusElement.innerHTML = 'Draw';
+    onMatchEnd();
     return;
   }
 
@@ -602,6 +633,98 @@ function draw() {
   }
 
   updateStatus();
+}
+
+// --- Render-to-video ---
+
+let mediaRecorder = null;
+let recordedChunks = [];
+let isRecording = false;
+let matchEnded = false;
+
+function pickMimeType() {
+  const candidates = [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+    'video/mp4'
+  ];
+  for (const type of candidates) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
+  }
+  return '';
+}
+
+function toggleRender() {
+  if (isRecording) {
+    stopRender();
+  } else {
+    startRender();
+  }
+}
+
+function startRender() {
+  if (!window.MediaRecorder) {
+    document.getElementById('renderStatus').textContent =
+      'MediaRecorder not supported in this browser';
+    return;
+  }
+
+  const canvasEl = document.querySelector('canvas');
+  const stream = canvasEl.captureStream(60);
+  const mimeType = pickMimeType();
+
+  recordedChunks = [];
+  matchEnded = false;
+
+  mediaRecorder = new MediaRecorder(
+    stream,
+    mimeType ? { mimeType, videoBitsPerSecond: 8_000_000 } : undefined
+  );
+
+  mediaRecorder.ondataavailable = e => {
+    if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: mimeType || 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `circle-battle-${Date.now()}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+    document.getElementById('renderStatus').textContent = 'Saved!';
+    document.getElementById('renderBtn').classList.remove('recording');
+    document.getElementById('renderBtn').textContent = 'Render Video';
+    isRecording = false;
+  };
+
+  resetSim();
+  mediaRecorder.start();
+  isRecording = true;
+  document.getElementById('renderBtn').classList.add('recording');
+  document.getElementById('renderBtn').textContent = 'Stop & Save';
+  document.getElementById('renderStatus').textContent = 'Recording…';
+}
+
+function stopRender() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+}
+
+function onMatchEnd() {
+  if (isRecording && !matchEnded) {
+    matchEnded = true;
+    setTimeout(stopRender, 800);
+  }
 }
 </script>
 </body>
